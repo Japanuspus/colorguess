@@ -22,6 +22,12 @@ pub struct Score {
     pub w: u8,
 }
 
+impl fmt::Display for Score {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}{}", "o".repeat(self.b as usize), "w".repeat(self.w as usize))
+    }
+}
+
 pub struct BoardRow {
     pub guess: Pegs,
     pub score: Score,
@@ -96,11 +102,46 @@ fn test_score() {
 }
 
 
-fn triangle(n: u8) -> u8 { n*(n+1)/2 }
+//fn triangle(n: u8) -> u8 { n*(n+1)/2 }
 
 /// Convert score to unique index in range(N_SCORE)
-fn score_index(s: &Score) -> u8 {
-    s.b+triangle(N_PEG as u8-s.w)
+///   |  0  1  2  3  4 (b)
+///  -+-------------------
+///  0| 10 11 12 13 14 
+///  1|  6  7  8  9
+///  2|  3  4  5
+///  3|  1  2
+///  4|  0
+/// (w)
+fn score_index(s: &Score) -> usize {
+    let n = N_PEG - s.w as usize;
+    let t = n*(n+1)/2;
+    // triangle(N_PEG - s.w as usize);
+    (s.b as usize) + t
+}
+
+fn list_scores() -> Vec<Score> {
+    (0..=N_PEG as u8).flat_map(|n_total| 
+        (0..=n_total).map(move |n_w| Score {b: n_total-n_w,  w: n_w}) 
+    ).collect()
+}
+
+const fn num_bits<T>() -> usize { std::mem::size_of::<T>() * 8 }
+fn log_2(x: u16) -> usize {
+    num_bits::<u16>() as usize - (x.leading_zeros() as usize)
+}
+
+pub fn print_score_histogram(histogram: & ScoreHistogram) {
+    for score in list_scores() {
+        let ct = histogram[score_index(&score)];
+        let nhash = log_2(ct);
+        println!("{: >4}: {: <4}  {}", &score, ct, "#".repeat(nhash));
+    }
+}
+
+#[test]
+fn test_score_index() {
+    assert_eq!(score_index(&Score {b: 2, w: 1}), 8);
 }
 
 pub fn count_outcomes(guess: &Pegs, possible: &[Pegs]) -> ScoreHistogram {
