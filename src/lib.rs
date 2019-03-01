@@ -38,7 +38,6 @@ pub struct Board {
     pub possible: Vec<Pegs>,
 }
 
-
 fn count_matches_exact(a: &Pegs, b: &Pegs) -> u8 {
     a.iter().zip(b.iter()).filter(|(ia,ib)| ia==ib).count() as u8
 }
@@ -50,7 +49,7 @@ fn test_count_matches_exact() {
     assert_eq!(1, count_matches_exact(&[1,1,1,1], &[4,3,2,1]));
 }
 
-fn count_matches_color(a: &Pegs, b: &Pegs) -> u8 {
+pub fn count_matches_color(a: &Pegs, b: &Pegs) -> u8 {
     let mut ia = a.into_iter().sorted().peekable();
     let mut ib = b.into_iter().sorted().peekable();
     let mut color: u8 = 0;
@@ -68,6 +67,22 @@ fn count_matches_color(a: &Pegs, b: &Pegs) -> u8 {
     };
     color
 }
+
+// 3 times faster than sorting...
+pub fn count_matches_color_nosort(a: &Pegs, b: &Pegs) -> u8 {
+    let mut counts = [0u8; N_COLOR];
+    // Only count for those colors present in a
+    for va in a {
+        counts[*va as usize] = a
+        .into_iter()
+        .filter(|v| **v==*va)
+        .zip(
+            b.into_iter().filter(|v| **v==*va)
+        ).count() as u8;
+    }
+    counts.iter().sum()
+}
+
 
 pub fn get_random_pegs() -> Pegs {
     let mut rng = rand::thread_rng();
@@ -87,7 +102,14 @@ fn test_count_matches_color() {
     assert_eq!(1, f(&[1,1,1,1], &[4,3,2,1]));
 }
 
+#[test]
+fn test_count_matches_color_nosort() {
 
+    let f = count_matches_color_nosort;
+    assert_eq!(3, f(&[1,2,3,4], &[1,4,3,3]));
+    assert_eq!(4, f(&[1,2,3,4], &[4,3,2,1]));
+    assert_eq!(1, f(&[1,1,1,1], &[4,3,2,1]));
+}
 
 pub fn get_score(a: &Pegs, b: &Pegs) -> Score {
     let exact = count_matches_exact(a, b);
@@ -122,7 +144,7 @@ fn score_index(s: &Score) -> usize {
 
 fn list_scores() -> Vec<Score> {
     (0..=N_PEG as u8).flat_map(|n_total| 
-        (0..=n_total).map(move |n_w| Score {b: n_total-n_w,  w: n_w}) 
+        (0..=   n_total).map(move |n_w| Score {b: n_total-n_w,  w: n_w}) 
     ).collect()
 }
 
