@@ -1,6 +1,6 @@
 extern crate colorguess;
 
-use colorguess::{Board, BoardRow, Pegs, build_all_configs, count_outcomes, get_score, get_random_pegs, print_score_histogram};
+use colorguess::{Board, BoardRow, Pegs, build_all_configs, count_outcomes, print_score_histogram};
 
 fn strategy_greedy(board: &Board) -> Pegs {
     if board.possible.len()==1 {
@@ -16,11 +16,11 @@ fn strategy_greedy(board: &Board) -> Pegs {
 
 fn main() {
     let all = build_all_configs();
-    println!("1234: {:?}", count_outcomes(&[1,2,3,4], &all));
+    println!("1234: {:?}", count_outcomes(&Pegs::new(&[1,2,3,4]), &all));
     // println!("1233: {:?}", count_outcomes(&[1,2,3,3], &all));
     // println!("1122: {:?}", count_outcomes(&[1,1,2,2], &all));
 
-    let secret = get_random_pegs();
+    let secret = Pegs::random();
     let strategy = strategy_greedy;
     let mut board = Board::new();
     println!("Starting");
@@ -33,7 +33,7 @@ fn main() {
         println!("Outcome distribution for selected guess:");
         print_score_histogram(&chances);
 
-        let score = get_score(&secret, &guess);
+        let score = secret.score_against(&guess);
         let row = BoardRow {guess, score};
         print!("Tried row: {:}. ", &row);
         board.add_guess(row);

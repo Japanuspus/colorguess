@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use std::fmt;
 use rand;
 use rand::prelude::*;
@@ -7,7 +6,15 @@ const N_PEG: usize = 4;
 const N_COLOR: usize = 8;
 const N_SCORE: usize = (N_PEG+2)*(N_PEG+1)/2;
 
-pub type Pegs = [u8; N_PEG];
+
+type RawPegs =  [u8; N_PEG];
+
+#[derive(Debug, Clone)]
+pub struct Pegs {
+    ordered: RawPegs, 
+    sorted: RawPegs,
+}
+
 pub type ScoreHistogram = [u16; N_SCORE]; //u16 can hold N_COLOR ^ N_PEG
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -28,6 +35,79 @@ impl fmt::Display for Score {
     }
 }
 
+
+impl Pegs {
+    pub fn new(vals: &RawPegs) -> Self 
+    {
+        let mut p = Pegs {
+            ordered: vals.clone(),
+            sorted: vals.clone(),
+        };
+        p.sorted.sort();
+        p
+    }
+
+    pub fn random() -> Self {
+        let mut rng = rand::thread_rng();
+        let mut pegs: RawPegs = [0; N_PEG];
+        for i in 0..pegs.len() {
+            pegs[i] = rng.gen_range(0 as u8, N_COLOR as u8);
+        }
+        Pegs::new(&pegs)
+    }
+
+    pub fn values<'a>(&'a self) -> &'a RawPegs {
+        &self.ordered
+    }
+
+    fn count_matches_exact(&self, b: &Pegs) -> u8 {
+        self.ordered.iter().zip(b.ordered.iter()).filter(|(ia,ib)| ia==ib).count() as u8
+    }
+
+    fn count_matches_color(&self, other: &Pegs) -> u8 {
+        let mut ia = 0;
+        let mut ib = 0;
+        let mut color = 0;
+        let a = self.sorted;
+        let b = other.sorted;
+        while (ia<N_PEG) & (ib<N_PEG) {
+            let va = a[ia];
+            let vb = b[ib];
+            if va==vb {color += 1;}
+            if va<=vb {ia+=1;}
+            if vb<=va {ib+=1;}
+        }
+        color
+    }
+
+    pub fn score_against(self: &Pegs, b: &Pegs) -> Score {
+        let exact = self.count_matches_exact(b);
+        let color = self.count_matches_color(b);
+        Score {b: exact, w: color-exact}
+    }
+}
+
+impl fmt::Display for Pegs {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.ordered)
+    }
+}
+
+
+#[test]
+fn test_score() {
+    let s = Pegs::new(&[1,2,3,4]).score_against(&Pegs::new(&[1,4,3,3])); 
+    assert_eq!((s.b, s.w), (2, 1));
+
+    let s = Pegs::new(&[1,2,3,4]).score_against(&Pegs::new(&[4,3,2,1])); 
+    assert_eq!((s.b, s.w), (0, 4));
+
+    let s = Pegs::new(&[1,1,1,1]).score_against(&Pegs::new(&[1,4,3,3])); 
+    assert_eq!((s.b, s.w), (1, 0));
+}
+
+
+
 pub struct BoardRow {
     pub guess: Pegs,
     pub score: Score,
@@ -38,90 +118,7 @@ pub struct Board {
     pub possible: Vec<Pegs>,
 }
 
-fn count_matches_exact(a: &Pegs, b: &Pegs) -> u8 {
-    a.iter().zip(b.iter()).filter(|(ia,ib)| ia==ib).count() as u8
-}
 
-#[test]
-fn test_count_matches_exact() {
-    assert_eq!(2, count_matches_exact(&[1,2,3,4], &[1,4,3,3]));
-    assert_eq!(0, count_matches_exact(&[1,2,3,4], &[4,3,2,1]));
-    assert_eq!(1, count_matches_exact(&[1,1,1,1], &[4,3,2,1]));
-}
-
-pub fn count_matches_color(a: &Pegs, b: &Pegs) -> u8 {
-    let mut ia = a.into_iter().sorted().peekable();
-    let mut ib = b.into_iter().sorted().peekable();
-    let mut color: u8 = 0;
-    loop {
-        let adv = match (ia.peek(), ib.peek()) {
-            (Some(ca), Some(cb)) => {
-                //if ca==cb {color+=1;}
-                (ca<=cb, cb<=ca)
-            },
-            _ => break,
-        };
-        if adv.0 {ia.next();}
-        if adv.1 {ib.next();}
-        if adv.0 && adv.1 {color+=1;}
-    };
-    color
-}
-
-// 3 times faster than sorting...
-pub fn count_matches_color_nosort(a: &Pegs, b: &Pegs) -> u8 {
-    let mut counts = [0u8; N_COLOR];
-    // Only count for those colors present in a
-    for va in a {
-        counts[*va as usize] = a
-        .into_iter()
-        .filter(|v| **v==*va)
-        .zip(
-            b.into_iter().filter(|v| **v==*va)
-        ).count() as u8;
-    }
-    counts.iter().sum()
-}
-
-
-pub fn get_random_pegs() -> Pegs {
-    let mut rng = rand::thread_rng();
-    let mut pegs: Pegs = [0; N_PEG];
-    for i in 0..pegs.len() {
-        pegs[i] = rng.gen_range(0 as u8, N_COLOR as u8);
-    }
-    pegs
-}
-
-#[test]
-fn test_count_matches_color() {
-
-    let f = count_matches_color;
-    assert_eq!(3, f(&[1,2,3,4], &[1,4,3,3]));
-    assert_eq!(4, f(&[1,2,3,4], &[4,3,2,1]));
-    assert_eq!(1, f(&[1,1,1,1], &[4,3,2,1]));
-}
-
-#[test]
-fn test_count_matches_color_nosort() {
-
-    let f = count_matches_color_nosort;
-    assert_eq!(3, f(&[1,2,3,4], &[1,4,3,3]));
-    assert_eq!(4, f(&[1,2,3,4], &[4,3,2,1]));
-    assert_eq!(1, f(&[1,1,1,1], &[4,3,2,1]));
-}
-
-pub fn get_score(a: &Pegs, b: &Pegs) -> Score {
-    let exact = count_matches_exact(a, b);
-    let color = count_matches_color(a, b);
-    Score {b: exact, w: color-exact}
-}
-
-#[test]
-fn test_score() {
-    let s = get_score(&[1,2,3,4], &[1,4,3,3]); 
-    assert_eq!((s.b, s.w), (2, 1));
-}
 
 
 //fn triangle(n: u8) -> u8 { n*(n+1)/2 }
@@ -169,22 +166,24 @@ fn test_score_index() {
 pub fn count_outcomes(guess: &Pegs, possible: &[Pegs]) -> ScoreHistogram {
     let mut s = [0; N_SCORE];
     for p in possible {
-        s[score_index(&get_score(guess, p)) as usize]+=1;
+        s[score_index(&guess.score_against(p)) as usize]+=1;
     }
     s
 }
 
 /// Expand peg list by replacing each entry with N_COLOR entries
 /// obtained by setting value of Peg[i] to all in 0..N_COLOR
-fn expand_peg_list(pegs: &[Pegs], index: usize) -> Vec<Pegs> {
+fn expand_peg_list(pegs: &[RawPegs], index: usize) -> Vec<RawPegs> {
     pegs.iter()
-    .map(|p: &Pegs| {
+    .map(|p: &RawPegs| {
         (0..(N_COLOR as u8)).map(move |v| {let mut pp=p.clone(); pp[index]=v; pp})
     }).flatten().collect()
 }
 
 pub fn build_all_configs() -> Vec<Pegs> {
-    (0..N_PEG).fold(vec![[0;4]], |p, index| expand_peg_list(&p, index))
+    (0..N_PEG)
+    .fold(vec![[0;4]], |p, index| expand_peg_list(&p, index))
+    .iter().map(|p| Pegs::new(p)).collect()
 }
 
 
@@ -204,7 +203,7 @@ impl Board {
     
     pub fn add_guess(&mut self, r: BoardRow) {
         self.possible = self.possible.iter()
-            .filter(|p| get_score(p, &r.guess)==r.score)
+            .filter(|p| p.score_against(&r.guess)==r.score)
             .cloned().collect();
         self.guesses.push(r);
     }
